@@ -1,4 +1,59 @@
 // ==========================================
+// SUPABASE BACKEND INTEGRATION
+// ==========================================
+const SUPABASE_URL = 'https://yjzkcqbbhusqcyhgrbke.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_owBdQVbMJ6SvVpjm-JE0ig_OqHeMFdQ';
+
+// Initialize Supabase Client safely
+let supabaseClient = null;
+if (typeof supabase !== 'undefined') {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} else {
+    console.warn('Supabase SDK not loaded in HTML yet.');
+}
+
+// Function to save bet data to Supabase database
+async function recordBet(phone, betAmount, multiplier, winAmount) {
+    if (!supabaseClient) return;
+
+    const { data, error } = await supabaseClient
+        .from('bets')
+        .insert([
+            {
+                phone: phone || 'Anonymous',
+                bet_amount: betAmount,
+                multiplier: multiplier,
+                win_amount: winAmount
+            }
+        ]);
+
+    if (error) {
+        console.error('Error saving bet to Supabase:', error.message);
+    } else {
+        console.log('Bet successfully recorded in Supabase:', data);
+    }
+}
+
+// ==========================================
+// SOUND TOGGLE CONTROLLER
+// ==========================================
+let isMuted = false;
+
+function toggleSound() {
+    isMuted = !isMuted;
+    const soundIcon = document.getElementById('soundIcon');
+    if (soundIcon) {
+        soundIcon.textContent = isMuted ? '🔇' : '🔊';
+    }
+
+    if (isMuted) {
+        stopEngineSound(false);
+    } else if (gameState === 'FLYING') {
+        startEngineSound();
+    }
+}
+
+// ==========================================
 // TOTO AVIATOR CORE ENGINE & STATE MANAGEMENT
 // ==========================================
 
@@ -49,9 +104,8 @@ function initAudio() {
 }
 
 function startEngineSound() {
+    if (isMuted) return;
     initAudio();
-    const soundToggle = document.getElementById('soundToggle');
-    if (soundToggle && !soundToggle.checked) return;
 
     if (audioCtx.state === 'suspended') {
         audioCtx.resume();
@@ -72,8 +126,7 @@ function startEngineSound() {
 }
 
 function updateEnginePitch(mult) {
-    const soundToggle = document.getElementById('soundToggle');
-    if (!engineOsc || !audioCtx || (soundToggle && !soundToggle.checked)) return;
+    if (isMuted || !engineOsc || !audioCtx) return;
     const freq = Math.min(60 + (mult * 45), 800);
     engineOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
 }
@@ -84,8 +137,7 @@ function stopEngineSound(isCrash = false) {
         engineOsc.disconnect();
         engineOsc = null;
     }
-    const soundToggle = document.getElementById('soundToggle');
-    if (isCrash && audioCtx && (!soundToggle || soundToggle.checked)) {
+    if (isCrash && !isMuted && audioCtx) {
         const crashOsc = audioCtx.createOscillator();
         const crashGain = audioCtx.createGain();
         crashOsc.type = 'square';
@@ -149,9 +201,11 @@ function runGameRound() {
         } else {
             b.placed = false;
             b.cashedOut = false;
-            btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
-            btn.style.background = "";
-            btn.className = "main-action-btn btn-bet";
+            if (btn) {
+                btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+                btn.style.background = "";
+                btn.className = "main-action-btn btn-bet";
+            }
         }
     }
 
@@ -170,8 +224,10 @@ function runGameRound() {
             if (bets[id].placed) {
                 bets[id].cashedOut = false;
                 let btn = document.getElementById(`action-btn-${id}`);
-                btn.className = "main-action-btn btn-cashout";
-                btn.style.background = "#f39c12";
+                if (btn) {
+                    btn.className = "main-action-btn btn-cashout";
+                    btn.style.background = "#f39c12";
+                }
             }
         }
     }, 4000);
@@ -225,8 +281,10 @@ function renderFrame() {
         for (let id of [1, 2]) {
             if (bets[id].placed && !bets[id].cashedOut) {
                 let btn = document.getElementById(`action-btn-${id}`);
-                let liveWin = (bets[id].amount * currentMultiplier).toFixed(2);
-                btn.innerHTML = `CASH OUT<br><span class="btn-sub-amt">${liveWin} KES</span>`;
+                if (btn) {
+                    let liveWin = (bets[id].amount * currentMultiplier).toFixed(2);
+                    btn.innerHTML = `CASH OUT<br><span class="btn-sub-amt">${liveWin} KES</span>`;
+                }
             }
         }
 
@@ -262,13 +320,17 @@ function renderFrame() {
                 multiplierText.style.color = '#e74c3c';
             }
 
-            // Disable uncashed bets
+            // Disable uncashed bets and log loss to Supabase
             for (let id of [1, 2]) {
                 if (bets[id].placed && !bets[id].cashedOut) {
                     let btn = document.getElementById(`action-btn-${id}`);
-                    btn.innerHTML = `FLEW AWAY<br><span class="btn-sub-amt">0.00 KES</span>`;
-                    btn.className = "main-action-btn btn-disabled";
-                    btn.style.background = "#7f8c8d";
+                    if (btn) {
+                        btn.innerHTML = `FLEW AWAY<br><span class="btn-sub-amt">0.00 KES</span>`;
+                        btn.className = "main-action-btn btn-disabled";
+                        btn.style.background = "#7f8c8d";
+                    }
+                    // Save lost bet to Supabase
+                    recordBet('Player', bets[id].amount, currentMultiplier, 0.00);
                 }
             }
 
@@ -300,23 +362,28 @@ function addHistoryBadge(mult) {
 function setBet(panelId, amount) {
     if (gameState === 'FLYING') return;
     bets[panelId].amount = amount;
-    document.getElementById(`bet-amount-${panelId}`).value = amount.toFixed(2);
-    document.getElementById(`sub-${panelId}`).innerText = `${amount.toFixed(2)} KES`;
+    const input = document.getElementById(`bet-amount-${panelId}`);
+    const sub = document.getElementById(`sub-${panelId}`);
+    if (input) input.value = amount.toFixed(2);
+    if (sub) sub.innerText = `${amount.toFixed(2)} KES`;
 }
 
 function adjustBet(panelId, delta) {
     if (gameState === 'FLYING') return;
     let input = document.getElementById(`bet-amount-${panelId}`);
+    if (!input) return;
     let val = Math.max(10, parseFloat(input.value) + delta);
     bets[panelId].amount = val;
     input.value = val.toFixed(2);
-    document.getElementById(`sub-${panelId}`).innerText = `${val.toFixed(2)} KES`;
+    const sub = document.getElementById(`sub-${panelId}`);
+    if (sub) sub.innerText = `${val.toFixed(2)} KES`;
 }
 
 function handleAction(panelId) {
     initAudio();
     let b = bets[panelId];
-    let inputVal = parseFloat(document.getElementById(`bet-amount-${panelId}`).value) || 10.00;
+    let inputElem = document.getElementById(`bet-amount-${panelId}`);
+    let inputVal = inputElem ? parseFloat(inputElem.value) || 10.00 : 10.00;
     b.amount = inputVal;
     let btn = document.getElementById(`action-btn-${panelId}`);
 
@@ -330,16 +397,20 @@ function handleAction(panelId) {
             if (balanceVal) balanceVal.innerText = balance.toFixed(2);
             
             b.placed = true;
-            btn.innerHTML = `CANCEL<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
-            btn.style.background = "#d81b36";
+            if (btn) {
+                btn.innerHTML = `CANCEL<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+                btn.style.background = "#d81b36";
+            }
         } else {
             balance += b.amount;
             if (balanceVal) balanceVal.innerText = balance.toFixed(2);
             
             b.placed = false;
-            btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
-            btn.style.background = "";
-            btn.className = "main-action-btn btn-bet";
+            if (btn) {
+                btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+                btn.style.background = "";
+                btn.className = "main-action-btn btn-bet";
+            }
         }
     } else if (gameState === 'FLYING' && b.placed && !b.cashedOut) {
         b.cashedOut = true;
@@ -347,9 +418,14 @@ function handleAction(panelId) {
         balance += winnings;
         if (balanceVal) balanceVal.innerText = balance.toFixed(2);
         
-        btn.innerHTML = `WON<br><span class="btn-sub-amt">${winnings.toFixed(2)} KES</span>`;
-        btn.className = "main-action-btn btn-disabled";
-        btn.style.background = "#2ecc71";
+        if (btn) {
+            btn.innerHTML = `WON<br><span class="btn-sub-amt">${winnings.toFixed(2)} KES</span>`;
+            btn.className = "main-action-btn btn-disabled";
+            btn.style.background = "#2ecc71";
+        }
+
+        // Save winning cashout to Supabase
+        recordBet('Player', b.amount, currentMultiplier, winnings);
     }
 }
 
@@ -427,36 +503,42 @@ function toggleDepositModal() {
 
 function openPaymentForm(method) {
     selectedPaymentMethod = method;
-    document.getElementById('modal-title').innerText = `${method} Deposit`;
-    document.getElementById('payment-selection-view').style.display = 'none';
+    const title = document.getElementById('modal-title');
+    if (title) title.innerText = `${method} Deposit`;
+    
+    const selView = document.getElementById('payment-selection-view');
+    if (selView) selView.style.display = 'none';
     
     const formView = document.getElementById('payment-form-view');
     const inputsContainer = document.getElementById('payment-inputs');
-    formView.style.display = 'flex';
+    if (formView) formView.style.display = 'flex';
 
-    if (method === 'M-Pesa' || method === 'Airtel Money') {
-        inputsContainer.innerHTML = `
-            <label style="font-size:0.8rem; color:#bdc3c7;">Phone Number</label>
-            <input type="text" id="deposit-phone" placeholder="07XXXXXXXX or 01XXXXXXXX" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px; margin-bottom:8px;">
-            <label style="font-size:0.8rem; color:#bdc3c7;">Amount (KES)</label>
-            <input type="number" id="deposit-amount" placeholder="Min 10 KES" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px;">
-        `;
-    } else if (method === 'Crypto') {
-        inputsContainer.innerHTML = `
-            <label style="font-size:0.8rem; color:#bdc3c7;">Network</label>
-            <select id="crypto-network" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px; margin-bottom:8px;">
-                <option value="USDT_TRC20">USDT (TRC20)</option>
-                <option value="BTC">Bitcoin (BTC)</option>
-                <option value="ETH">Ethereum (ERC20)</option>
-            </select>
-            <label style="font-size:0.8rem; color:#bdc3c7;">Amount (USD)</label>
-            <input type="number" id="deposit-amount" placeholder="Min $1" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px;">
-        `;
+    if (inputsContainer) {
+        if (method === 'M-Pesa' || method === 'Airtel Money') {
+            inputsContainer.innerHTML = `
+                <label style="font-size:0.8rem; color:#bdc3c7;">Phone Number</label>
+                <input type="text" id="deposit-phone" placeholder="07XXXXXXXX or 01XXXXXXXX" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px; margin-bottom:8px;">
+                <label style="font-size:0.8rem; color:#bdc3c7;">Amount (KES)</label>
+                <input type="number" id="deposit-amount" placeholder="Min 10 KES" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px;">
+            `;
+        } else if (method === 'Crypto') {
+            inputsContainer.innerHTML = `
+                <label style="font-size:0.8rem; color:#bdc3c7;">Network</label>
+                <select id="crypto-network" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px; margin-bottom:8px;">
+                    <option value="USDT_TRC20">USDT (TRC20)</option>
+                    <option value="BTC">Bitcoin (BTC)</option>
+                    <option value="ETH">Ethereum (ERC20)</option>
+                </select>
+                <label style="font-size:0.8rem; color:#bdc3c7;">Amount (USD)</label>
+                <input type="number" id="deposit-amount" placeholder="Min $1" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px;">
+            `;
+        }
     }
 }
 
 function processDeposit() {
-    const amount = parseFloat(document.getElementById('deposit-amount')?.value);
+    const amountElem = document.getElementById('deposit-amount');
+    const amount = amountElem ? parseFloat(amountElem.value) : 0;
     
     if (!amount || amount <= 0) {
         alert('Please enter a valid amount.');
@@ -464,7 +546,8 @@ function processDeposit() {
     }
 
     if (selectedPaymentMethod === 'M-Pesa' || selectedPaymentMethod === 'Airtel Money') {
-        const phone = document.getElementById('deposit-phone').value;
+        const phoneElem = document.getElementById('deposit-phone');
+        const phone = phoneElem ? phoneElem.value : '';
         if (!phone) {
             alert('Please enter a valid phone number.');
             return;
@@ -474,7 +557,8 @@ function processDeposit() {
         if (balanceVal) balanceVal.innerText = balance.toFixed(2);
         alert(`STK Push prompt sent to ${phone}. Balance updated by ${amount} KES.`);
     } else if (selectedPaymentMethod === 'Crypto') {
-        const network = document.getElementById('crypto-network').value;
+        const networkElem = document.getElementById('crypto-network');
+        const network = networkElem ? networkElem.value : 'Crypto';
         const kesEquivalent = amount * 130;
         balance += kesEquivalent;
         if (balanceVal) balanceVal.innerText = balance.toFixed(2);
@@ -496,22 +580,23 @@ function resetDepositModal() {
 }
 
 function toggleMenu() {
-    document.getElementById('sideMenu').classList.toggle('open');
-    document.getElementById('menuOverlay').classList.toggle('open');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+    if (sideMenu) sideMenu.classList.toggle('open');
+    if (menuOverlay) menuOverlay.classList.toggle('open');
 }
 
 function switchBetTab(panelId, tab) {
     let panel = document.getElementById(`panel-${panelId}`);
     if (!panel) return;
     panel.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) event.target.classList.add('active');
 }
 
 function switchStatsTab(tabName) {
     document.querySelectorAll('.stats-tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) event.target.classList.add('active');
 }
 
 // Start continuous loop engine on window load
 window.addEventListener('load', startContinuousEngine);
-
