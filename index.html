@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket Crash Game</title>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .game-container {
+            background: #1e293b;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            text-align: center;
+            width: 320px;
+        }
+        #multiplier {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 1.5rem 0;
+            color: #38bdf8;
+        }
+        input, button {
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            border-radius: 6px;
+            border: none;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        input {
+            background: #0f172a;
+            color: #fff;
+            border: 1px solid #475569;
+        }
+        button {
+            background: #22c55e;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:disabled {
+            background: #64748b;
+            cursor: not-allowed;
+        }
+        #cashout-btn {
+            background: #eab308;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <h2>Rocket Launch</h2>
+        <div id="multiplier">1.00x</div>
+        
+        <div id="controls">
+            <input type="number" id="bet-input" placeholder="Enter Bet Amount" value="10">
+            <button id="action-btn" onclick="startGame()">Place Bet & Launch</button>
+            <button id="cashout-btn" onclick="cashOut()">CASH OUT</button>
+        </div>
+        <p id="status-message" style="margin-top: 1rem; font-size: 0.9rem; color: #94a3b8;"></p>
+    </div>
+
+    <script>
+        let currentMultiplier = 1.00;
+        let crashPoint = 1.00;
+        let gameInterval = null;
+        let isPlaying = false;
+        let hasCashedOut = false;
+        let betAmount = 0;
+
+        function generateCrashPoint() {
+            // House edge formula: 99 / (100 - random) roughly gives a standard crash distribution
+            // For simplicity in a prototype, a weighted random curve works best:
+            let r = Math.random();
+            // 5% chance to crash instantly at 1.00x
+            if (r < 0.05) return 1.00;
+            
+            // Standard exponential curve for crash distribution
+            return parseFloat((Math.max(1.01, 0.99 / (1 - Math.random() * 0.98))).toFixed(2));
+        }
+
+        function startGame() {
+            betAmount = parseFloat(document.getElementById('bet-input').value);
+            if (!betAmount || betAmount <= 0) {
+                alert("Enter a valid bet!");
+                return;
+            }
+
+            // Reset states
+            currentMultiplier = 1.00;
+            crashPoint = generateCrashPoint();
+            isPlaying = true;
+            hasCashedOut = false;
+
+            document.getElementById('bet-input').disabled = true;
+            document.getElementById('action-btn').style.display = 'none';
+            document.getElementById('cashout-btn').style.display = 'block';
+            document.getElementById('status-message').innerText = "Rocket ascending...";
+            document.getElementById('multiplier').style.color = "#38bdf8";
+
+            // Game loop ticking every 50ms
+            gameInterval = setInterval(() => {
+                // Exponential growth simulation
+                currentMultiplier += 0.02 * currentMultiplier;
+                
+                if (currentMultiplier >= crashPoint) {
+                    currentMultiplier = crashPoint;
+                    endGame(true); // Crashed
+                }
+
+                document.getElementById('multiplier').innerText = currentMultiplier.toFixed(2) + 'x';
+            }, 50);
+        }
+
+        function cashOut() {
+            if (!isPlaying || hasCashedOut) return;
+            hasCashedOut = true;
+            let winnings = (betAmount * currentMultiplier).toFixed(2);
+            document.getElementById('status-message').innerText = `Successfully cashed out! Won: $${winnings}`;
+            document.getElementById('multiplier').style.color = "#22c55e";
+            document.getElementById('cashout-btn').style.display = 'none';
+            document.getElementById('action-btn').style.display = 'block';
+            document.getElementById('action-btn').innerText = "Play Again";
+            document.getElementById('bet-input').disabled = false;
+            isPlaying = false;
+            clearInterval(gameInterval);
+        }
+
+        function endGame(crashed) {
+            isPlaying = false;
+            clearInterval(gameInterval);
+            document.getElementById('cashout-btn').style.display = 'none';
+            document.getElementById('action-btn').style.display = 'block';
+            document.getElementById('action-btn').innerText = "Play Again";
+            document.getElementById('bet-input').disabled = false;
+
+            if (crashed && !hasCashedOut) {
+                document.getElementById('status-message').innerText = `CRASHED! Rocket blew up at ${crashPoint.x || crashPoint}x. You lost $${betAmount}.`;
+                document.getElementById('multiplier').style.color = "#ef4444";
+            }
+        }
+    </script>
+</body>
+</html>
+
