@@ -20,7 +20,6 @@
             min-height: 100vh;
         }
 
-        /* Top Header */
         header {
             background-color: #1a1e23;
             padding: 15px 20px;
@@ -60,9 +59,9 @@
             color: #ffffff;
         }
 
-        /* Hero Container */
         .hero {
-            max-width: 500px;
+            max-width: 450px;
+            width: 90%;
             margin: 40px auto;
             padding: 30px 20px;
             background-color: #1a1e23;
@@ -73,7 +72,7 @@
 
         .hero h1 {
             color: #ffffff;
-            font-size: 28px;
+            font-size: 26px;
             margin-bottom: 10px;
         }
 
@@ -83,7 +82,6 @@
             color: #7f8c8d;
         }
 
-        /* Form Controls */
         .form-group {
             margin-bottom: 15px;
             text-align: left;
@@ -112,7 +110,6 @@
             border-color: #27ae60;
         }
 
-        /* Checkbox Container */
         .terms-checkbox {
             display: flex;
             align-items: flex-start;
@@ -139,7 +136,6 @@
             text-decoration: underline;
         }
 
-        /* Submit Button */
         .btn-submit {
             width: 100%;
             background-color: #27ae60;
@@ -159,7 +155,6 @@
             cursor: not-allowed;
         }
 
-        /* Footer */
         footer {
             margin-top: auto;
             background-color: #1a1e23;
@@ -205,7 +200,6 @@
 </head>
 <body>
 
-    <!-- Header Navigation -->
     <header>
         <div class="brand">TOTO<span>.com</span></div>
         <div class="nav-buttons">
@@ -214,12 +208,11 @@
         </div>
     </header>
 
-    <!-- Main Hero / Sign-Up Form -->
     <main class="hero">
         <h1>Welcome to TOTO</h1>
-        <p>Enter your phone number to proceed directly to the platform.</p>
+        <p>Enter your details to register and start trading.</p>
 
-        <form action="trade.html" method="GET" id="accessForm">
+        <form action="signup.html" method="GET" id="accessForm">
             <div class="form-group">
                 <label for="phone">Mobile Phone Number (M-PESA)</label>
                 <input type="tel" id="phone" name="phone" placeholder="0712345678" required>
@@ -230,7 +223,6 @@
                 <input type="password" id="password" name="password" placeholder="Enter password" required>
             </div>
 
-            <!-- Mandatory Agreement Tick Box -->
             <div class="terms-checkbox">
                 <input type="checkbox" id="agreeCheckbox" onchange="toggleButton()">
                 <label for="agreeCheckbox">
@@ -240,11 +232,10 @@
                 </label>
             </div>
 
-            <button type="submit" id="submitBtn" class="btn-submit" disabled>Continue to Game</button>
+            <button type="submit" id="submitBtn" class="btn-submit" disabled>Continue to Sign Up</button>
         </form>
     </main>
 
-    <!-- Footer Section -->
     <footer>
         <div class="footer-content">
             <div class="brand" style="margin-bottom: 15px;">TOTO<span>.com</span></div>
@@ -277,7 +268,6 @@
         </div>
     </footer>
 
-    <!-- Enable / Disable button based on Tick Box -->
     <script>
         function toggleButton() {
             const checkbox = document.getElementById('agreeCheckbox');
@@ -287,4 +277,3 @@
     </script>
 </body>
 </html>
-
