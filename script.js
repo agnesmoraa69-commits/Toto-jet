@@ -1,35 +1,43 @@
-/* script.js */
+// ==========================================
+// TOTO AVIATOR CORE ENGINE & STATE MANAGEMENT
+// ==========================================
+
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas ? canvas.getContext('2d') : null;
 
 function resizeCanvas() {
     if (!canvas) return;
     canvas.width = canvas.parentElement.clientWidth;
     canvas.height = canvas.parentElement.clientHeight;
+    initStars();
 }
 window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
 
+// Global State
 let balance = 0.00;
-let gameState = 'IDLE'; // 'IDLE', 'RUNNING', 'CRASHED'
+let gameState = 'WAITING'; // 'WAITING', 'FLYING', 'CRASHED'
 let currentMultiplier = 1.00;
-let crashPoint = 1.00;
-let gameInterval = null;
-let animFrameId = null;
+let crashTarget = 1.00;
+let stars = [];
+let planePos = { x: 0, y: 0 };
+let progress = 0;
+let selectedPaymentMethod = null;
 
 let bets = {
     1: { amount: 10.00, placed: false, cashedOut: false },
     2: { amount: 10.00, placed: false, cashedOut: false }
 };
 
-// Elements
+// UI Elements
 const multiplierText = document.getElementById('multiplier-text');
 const waitingBadge = document.getElementById('waiting-badge');
 const balanceVal = document.getElementById('balance-val');
 const statsList = document.getElementById('stats-list');
 const totalBetsCount = document.getElementById('total-bets-count');
 
-// Audio Synthesizer for Jet Sound Effect (Web Audio API)
+// ==========================================
+// AUDIO SYNTHESIZER ENGINE (Web Audio API)
+// ==========================================
 let audioCtx = null;
 let engineOsc = null;
 let engineGain = null;
@@ -38,154 +46,321 @@ function initAudio() {
     if (audioCtx) return;
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     audioCtx = new AudioContext();
+}
+
+function startEngineSound() {
+    initAudio();
+    const soundToggle = document.getElementById('soundToggle');
+    if (soundToggle && !soundToggle.checked) return;
+
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    
+    if (engineOsc) stopEngineSound();
 
     engineOsc = audioCtx.createOscillator();
     engineGain = audioCtx.createGain();
 
     engineOsc.type = 'sawtooth';
-    engineOsc.frequency.setValueAtTime(60, audioCtx.currentTime); // Low engine pitch
-    engineGain.gain.setValueAtTime(0.001, audioCtx.currentTime); // Silent initially
+    engineOsc.frequency.setValueAtTime(60, audioCtx.currentTime);
+    engineGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
 
     engineOsc.connect(engineGain);
     engineGain.connect(audioCtx.destination);
     engineOsc.start();
 }
 
-function updateJetAudio(multiplier) {
-    const soundEnabled = document.getElementById('soundToggle').checked;
-    if (!audioCtx || !soundEnabled) return;
+function updateEnginePitch(mult) {
+    const soundToggle = document.getElementById('soundToggle');
+    if (!engineOsc || !audioCtx || (soundToggle && !soundToggle.checked)) return;
+    const freq = Math.min(60 + (mult * 45), 800);
+    engineOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
+}
 
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
+function stopEngineSound(isCrash = false) {
+    if (engineOsc) {
+        engineOsc.stop();
+        engineOsc.disconnect();
+        engineOsc = null;
     }
+    const soundToggle = document.getElementById('soundToggle');
+    if (isCrash && audioCtx && (!soundToggle || soundToggle.checked)) {
+        const crashOsc = audioCtx.createOscillator();
+        const crashGain = audioCtx.createGain();
+        crashOsc.type = 'square';
+        crashOsc.frequency.setValueAtTime(120, audioCtx.currentTime);
+        crashOsc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.4);
+        
+        crashGain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        crashGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
 
-    if (gameState === 'RUNNING') {
-        let freq = 80 + (multiplier * 40);
-        engineOsc.frequency.setTargetAtTime(Math.min(freq, 800), audioCtx.currentTime, 0.1);
-        engineGain.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.1);
-    } else if (gameState === 'IDLE') {
-        engineOsc.frequency.setTargetAtTime(50, audioCtx.currentTime, 0.2);
-        engineGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 0.2);
-    } else {
-        engineGain.gain.setTargetAtTime(0.001, audioCtx.currentTime, 0.05);
+        crashOsc.connect(crashGain);
+        crashGain.connect(audioCtx.destination);
+        crashOsc.start();
+        crashOsc.stop(audioCtx.currentTime + 0.4);
     }
 }
 
-// Background Particle System for Idle & Flying States
-let particles = [];
-for (let i = 0; i < 40; i++) {
-    particles.push({
-        x: Math.random() * 400,
-        y: Math.random() * 200,
-        size: Math.random() * 2 + 1,
-        speedX: Math.random() * 0.5 + 0.2,
-        speedY: Math.random() * 0.2 - 0.1,
-        opacity: Math.random() * 0.5 + 0.2
-    });
+// ==========================================
+// CANVAS & FLIGHT ANIMATION LOOP
+// ==========================================
+function initStars() {
+    if (!canvas) return;
+    stars = [];
+    for (let i = 0; i < 40; i++) {
+        stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            size: Math.random() * 2 + 1,
+            speed: Math.random() * 1.5 + 0.5
+        });
+    }
 }
 
-let idleGridOffset = 0;
-let idleTime = 0;
+function startContinuousEngine() {
+    resizeCanvas();
+    runGameRound();
+    requestAnimationFrame(renderFrame);
+}
 
-function drawCanvasScene(elapsed) {
+function runGameRound() {
+    gameState = 'WAITING';
+    currentMultiplier = 1.00;
+    progress = 0;
+    
+    if (waitingBadge) {
+        waitingBadge.innerText = 'WAITING FOR NEXT ROUND';
+        waitingBadge.style.display = 'block';
+    }
+    if (multiplierText) {
+        multiplierText.innerText = '1.00x';
+        multiplierText.style.color = '#ffffff';
+    }
+
+    // Reset bet panel buttons for next round
+    for (let id of [1, 2]) {
+        let b = bets[id];
+        let btn = document.getElementById(`action-btn-${id}`);
+        if (b.placed && !b.cashedOut) {
+            // Bet stays queued from waiting period
+            btn.innerHTML = `CANCEL<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+            btn.style.background = "#d81b36";
+        } else {
+            b.placed = false;
+            b.cashedOut = false;
+            btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+            btn.style.background = "";
+            btn.className = "main-action-btn btn-bet";
+        }
+    }
+
+    // Set deterministic crash multiplier for round
+    const rand = Math.random();
+    crashTarget = rand < 0.1 ? 1.00 : parseFloat((1.01 + Math.pow(rand, 3) * 15).toFixed(2));
+
+    // Wait 4 seconds then launch flight
+    setTimeout(() => {
+        if (waitingBadge) waitingBadge.style.display = 'none';
+        gameState = 'FLYING';
+        startEngineSound();
+
+        // Switch active placed bet buttons to CASHOUT
+        for (let id of [1, 2]) {
+            if (bets[id].placed) {
+                bets[id].cashedOut = false;
+                let btn = document.getElementById(`action-btn-${id}`);
+                btn.className = "main-action-btn btn-cashout";
+                btn.style.background = "#f39c12";
+            }
+        }
+    }, 4000);
+}
+
+function renderFrame() {
+    if (!ctx || !canvas) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let w = canvas.width;
-    let h = canvas.height;
 
-    idleTime += 0.03;
-    idleGridOffset = (idleGridOffset + (gameState === 'RUNNING' ? 3 : 0.8)) % 30;
-
-    // 1. Render Animated Grid Lines
-    ctx.strokeStyle = 'rgba(216, 27, 54, 0.12)';
+    // Grid rendering
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
     ctx.lineWidth = 1;
-    for (let x = -idleGridOffset; x < w; x += 30) {
+    for (let x = 0; x < canvas.width; x += 40) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
+        ctx.lineTo(x, canvas.height);
         ctx.stroke();
     }
-    for (let y = 0; y < h; y += 30) {
+    for (let y = 0; y < canvas.height; y += 40) {
         ctx.beginPath();
         ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
+        ctx.lineTo(canvas.width, y);
         ctx.stroke();
     }
 
-    // 2. Render Floating Particles
-    particles.forEach(p => {
-        p.x -= (gameState === 'RUNNING' ? p.speedX * 3 : p.speedX);
-        if (p.x < 0) p.x = w;
-        ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+    // Move & render stars
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    stars.forEach(star => {
+        if (gameState === 'FLYING') {
+            star.x -= star.speed * (currentMultiplier * 0.5);
+            star.y += star.speed * 0.2;
+            if (star.x < 0) star.x = canvas.width;
+            if (star.y > canvas.height) star.y = 0;
+        }
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fill();
     });
 
-    // 3. Render Jet / Trajectory Curve
-    if (gameState === 'RUNNING') {
-        let px = Math.min(w * 0.75, elapsed * 35);
-        let py = Math.max(30, h - (elapsed * 22));
+    // Active flight trajectory rendering
+    if (gameState === 'FLYING') {
+        progress += 0.005;
+        currentMultiplier = parseFloat((currentMultiplier + 0.01 * (1 + progress * 2)).toFixed(2));
+        
+        updateEnginePitch(currentMultiplier);
 
-        // Filled area beneath flight curve
-        ctx.beginPath();
-        ctx.moveTo(0, h);
-        ctx.quadraticCurveTo(px * 0.5, h, px, py);
-        ctx.lineTo(px, h);
-        ctx.closePath();
-        let grad = ctx.createLinearGradient(0, py, 0, h);
-        grad.addColorStop(0, 'rgba(216, 27, 54, 0.35)');
-        grad.addColorStop(1, 'rgba(216, 27, 54, 0.0)');
-        ctx.fillStyle = grad;
-        ctx.fill();
+        if (multiplierText) multiplierText.innerText = `${currentMultiplier.toFixed(2)}x`;
 
-        // Flight curve line
+        // Update real-time button cashout values
+        for (let id of [1, 2]) {
+            if (bets[id].placed && !bets[id].cashedOut) {
+                let btn = document.getElementById(`action-btn-${id}`);
+                let liveWin = (bets[id].amount * currentMultiplier).toFixed(2);
+                btn.innerHTML = `CASH OUT<br><span class="btn-sub-amt">${liveWin} KES</span>`;
+            }
+        }
+
+        const startX = 20;
+        const startY = canvas.height - 20;
+        planePos.x = Math.min(startX + (canvas.width - 100) * (progress * 0.8), canvas.width - 60);
+        planePos.y = Math.max(startY - (canvas.height - 80) * Math.pow(progress * 0.8, 0.7), 60);
+
+        // Flight line curve
         ctx.beginPath();
-        ctx.moveTo(0, h);
-        ctx.quadraticCurveTo(px * 0.5, h, px, py);
-        ctx.strokeStyle = '#d81b36';
-        ctx.lineWidth = 3;
+        ctx.moveTo(startX, startY);
+        ctx.quadraticCurveTo(planePos.x * 0.3, startY, planePos.x, planePos.y);
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#e74c3c';
+        ctx.shadowBlur = 12;
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
-        // Jet Indicator Dot with Flame effect
-        ctx.save();
-        ctx.translate(px, py);
+        // Jet Marker
         ctx.fillStyle = '#f1c40f';
         ctx.beginPath();
-        ctx.arc(-8, 2, 4 + Math.sin(idleTime * 10) * 2, 0, Math.PI * 2);
+        ctx.arc(planePos.x, planePos.y, 8, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#d81b36';
-        ctx.beginPath();
-        ctx.arc(0, 0, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        // Check crash state
+        if (currentMultiplier >= crashTarget) {
+            gameState = 'CRASHED';
+            stopEngineSound(true);
 
-    } else if (gameState === 'IDLE') {
-        // Hovering Jet Icon on Runway in IDLE State
-        let hoverY = h - 25 + Math.sin(idleTime * 2) * 4;
-        ctx.fillStyle = 'rgba(216, 27, 54, 0.8)';
-        ctx.beginPath();
-        ctx.arc(30, hoverY, 6, 0, Math.PI * 2);
-        ctx.fill();
+            if (multiplierText) {
+                multiplierText.innerText = `FLEW AWAY @ ${currentMultiplier.toFixed(2)}x`;
+                multiplierText.style.color = '#e74c3c';
+            }
 
-        ctx.fillStyle = '#f1c40f';
-        ctx.beginPath();
-        ctx.arc(22, hoverY, 3 + Math.sin(idleTime * 6) * 1.5, 0, Math.PI * 2);
-        ctx.fill();
+            // Disable uncashed bets
+            for (let id of [1, 2]) {
+                if (bets[id].placed && !bets[id].cashedOut) {
+                    let btn = document.getElementById(`action-btn-${id}`);
+                    btn.innerHTML = `FLEW AWAY<br><span class="btn-sub-amt">0.00 KES</span>`;
+                    btn.className = "main-action-btn btn-disabled";
+                    btn.style.background = "#7f8c8d";
+                }
+            }
+
+            addHistoryBadge(currentMultiplier);
+            setTimeout(runGameRound, 3000);
+        }
     }
 
-    updateJetAudio(currentMultiplier);
-    animFrameId = requestAnimationFrame(() => drawCanvasScene(elapsed));
+    requestAnimationFrame(renderFrame);
 }
 
-// Start continuous background animation loop
-drawCanvasScene(0);
+function addHistoryBadge(mult) {
+    const historyBar = document.getElementById('history-bar');
+    if (!historyBar) return;
 
-// Virtual Real-time Results Feed Simulation
+    const badge = document.createElement('div');
+    badge.className = `hist-badge ${mult >= 10 ? 'hist-high' : mult >= 2 ? 'hist-mid' : 'hist-low'}`;
+    badge.innerText = `${mult.toFixed(2)}x`;
+
+    historyBar.insertBefore(badge, historyBar.firstChild);
+    if (historyBar.children.length > 10) {
+        historyBar.removeChild(historyBar.lastChild);
+    }
+}
+
+// ==========================================
+// PLAYER BETTING LOGIC
+// ==========================================
+function setBet(panelId, amount) {
+    if (gameState === 'FLYING') return;
+    bets[panelId].amount = amount;
+    document.getElementById(`bet-amount-${panelId}`).value = amount.toFixed(2);
+    document.getElementById(`sub-${panelId}`).innerText = `${amount.toFixed(2)} KES`;
+}
+
+function adjustBet(panelId, delta) {
+    if (gameState === 'FLYING') return;
+    let input = document.getElementById(`bet-amount-${panelId}`);
+    let val = Math.max(10, parseFloat(input.value) + delta);
+    bets[panelId].amount = val;
+    input.value = val.toFixed(2);
+    document.getElementById(`sub-${panelId}`).innerText = `${val.toFixed(2)} KES`;
+}
+
+function handleAction(panelId) {
+    initAudio();
+    let b = bets[panelId];
+    let inputVal = parseFloat(document.getElementById(`bet-amount-${panelId}`).value) || 10.00;
+    b.amount = inputVal;
+    let btn = document.getElementById(`action-btn-${panelId}`);
+
+    if (gameState === 'WAITING') {
+        if (!b.placed) {
+            if (balance < b.amount) {
+                alert('Insufficient balance. Please deposit funds.');
+                return;
+            }
+            balance -= b.amount;
+            if (balanceVal) balanceVal.innerText = balance.toFixed(2);
+            
+            b.placed = true;
+            btn.innerHTML = `CANCEL<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+            btn.style.background = "#d81b36";
+        } else {
+            balance += b.amount;
+            if (balanceVal) balanceVal.innerText = balance.toFixed(2);
+            
+            b.placed = false;
+            btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
+            btn.style.background = "";
+            btn.className = "main-action-btn btn-bet";
+        }
+    } else if (gameState === 'FLYING' && b.placed && !b.cashedOut) {
+        b.cashedOut = true;
+        let winnings = b.amount * currentMultiplier;
+        balance += winnings;
+        if (balanceVal) balanceVal.innerText = balance.toFixed(2);
+        
+        btn.innerHTML = `WON<br><span class="btn-sub-amt">${winnings.toFixed(2)} KES</span>`;
+        btn.className = "main-action-btn btn-disabled";
+        btn.style.background = "#2ecc71";
+    }
+}
+
+// ==========================================
+// REALTIME LIVE STATS FEED
+// ==========================================
 const mockUsers = ['2***3', '2***6', '2***2', '2***8', '2***1', '2***9', '2***5'];
 let liveBetsCount = 2965;
 
 function generateInitialStats() {
+    if (!statsList) return;
     statsList.innerHTML = '';
     for (let i = 0; i < 7; i++) {
         let user = mockUsers[Math.floor(Math.random() * mockUsers.length)];
@@ -208,15 +383,14 @@ function generateInitialStats() {
 }
 generateInitialStats();
 
-// Interval to simulate live active users betting in real time
 setInterval(() => {
-    if (Math.random() > 0.3) {
+    if (statsList && Math.random() > 0.3) {
         liveBetsCount += Math.floor(Math.random() * 3) + 1;
-        totalBetsCount.innerText = liveBetsCount;
+        if (totalBetsCount) totalBetsCount.innerText = liveBetsCount;
 
         let user = mockUsers[Math.floor(Math.random() * mockUsers.length)];
         let bet = (Math.floor(Math.random() * 15) + 1) * 100;
-        let isWin = gameState === 'RUNNING' && Math.random() > 0.5;
+        let isWin = gameState === 'FLYING' && Math.random() > 0.5;
         let mult = isWin ? currentMultiplier.toFixed(2) + 'x' : '-';
         let winVal = isWin ? (bet * currentMultiplier).toFixed(2) : '-';
 
@@ -239,136 +413,86 @@ setInterval(() => {
     }
 }, 2000);
 
-// Betting Logic
-function setBet(panelId, amount) {
-    if (gameState === 'RUNNING') return;
-    bets[panelId].amount = amount;
-    document.getElementById(`bet-amount-${panelId}`).value = amount.toFixed(2);
-    document.getElementById(`sub-${panelId}`).innerText = `${amount.toFixed(2)} KES`;
-}
-
-function adjustBet(panelId, delta) {
-    if (gameState === 'RUNNING') return;
-    let input = document.getElementById(`bet-amount-${panelId}`);
-    let val = Math.max(10, parseFloat(input.value) + delta);
-    bets[panelId].amount = val;
-    input.value = val.toFixed(2);
-    document.getElementById(`sub-${panelId}`).innerText = `${val.toFixed(2)} KES`;
-}
-
-function handleAction(panelId) {
-    initAudio();
-    let b = bets[panelId];
-    let inputVal = parseFloat(document.getElementById(`bet-amount-${panelId}`).value) || 10.00;
-    b.amount = inputVal;
-    let btn = document.getElementById(`action-btn-${panelId}`);
-
-    if (gameState === 'IDLE') {
-        if (!b.placed) {
-            b.placed = true;
-            btn.innerHTML = `CANCEL<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
-            btn.style.background = "#d81b36";
-            startLaunchSequence();
-        } else {
-            b.placed = false;
-            btn.innerHTML = `BET<br><span class="btn-sub-amt">${b.amount.toFixed(2)} KES</span>`;
-            btn.style.background = "";
-            btn.className = "main-action-btn btn-bet";
-        }
-    } else if (gameState === 'RUNNING' && b.placed && !b.cashedOut) {
-        b.cashedOut = true;
-        let winnings = b.amount * currentMultiplier;
-        balance += winnings;
-        balanceVal.innerText = balance.toFixed(2);
-        btn.innerHTML = `WON<br><span class="btn-sub-amt">${winnings.toFixed(2)} KES</span>`;
-        btn.className = "main-action-btn btn-disabled";
+// ==========================================
+// MODAL & DRAWER NAVIGATION LOGIC
+// ==========================================
+function toggleDepositModal() {
+    const modal = document.getElementById('depositModal');
+    if (!modal) return;
+    modal.classList.toggle('open');
+    if (!modal.classList.contains('open')) {
+        resetDepositModal();
     }
 }
 
-function startLaunchSequence() {
-    if (gameState === 'RUNNING') return;
-    gameState = 'RUNNING';
-    waitingBadge.style.display = 'none';
-    currentMultiplier = 1.00;
-    crashPoint = parseFloat((Math.max(1.05, (Math.random() * 4) + 1)).toFixed(2));
+function openPaymentForm(method) {
+    selectedPaymentMethod = method;
+    document.getElementById('modal-title').innerText = `${method} Deposit`;
+    document.getElementById('payment-selection-view').style.display = 'none';
+    
+    const formView = document.getElementById('payment-form-view');
+    const inputsContainer = document.getElementById('payment-inputs');
+    formView.style.display = 'flex';
 
-    for (let id of [1, 2]) {
-        if (bets[id].placed) {
-            bets[id].cashedOut = false;
-            let btn = document.getElementById(`action-btn-${id}`);
-            btn.className = "main-action-btn btn-cashout";
-        }
+    if (method === 'M-Pesa' || method === 'Airtel Money') {
+        inputsContainer.innerHTML = `
+            <label style="font-size:0.8rem; color:#bdc3c7;">Phone Number</label>
+            <input type="text" id="deposit-phone" placeholder="07XXXXXXXX or 01XXXXXXXX" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px; margin-bottom:8px;">
+            <label style="font-size:0.8rem; color:#bdc3c7;">Amount (KES)</label>
+            <input type="number" id="deposit-amount" placeholder="Min 10 KES" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px;">
+        `;
+    } else if (method === 'Crypto') {
+        inputsContainer.innerHTML = `
+            <label style="font-size:0.8rem; color:#bdc3c7;">Network</label>
+            <select id="crypto-network" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px; margin-bottom:8px;">
+                <option value="USDT_TRC20">USDT (TRC20)</option>
+                <option value="BTC">Bitcoin (BTC)</option>
+                <option value="ETH">Ethereum (ERC20)</option>
+            </select>
+            <label style="font-size:0.8rem; color:#bdc3c7;">Amount (USD)</label>
+            <input type="number" id="deposit-amount" placeholder="Min $1" style="width:100%; padding:8px; background:#07090d; border:1px solid #222b38; color:#fff; border-radius:6px;">
+        `;
+    }
+}
+
+function processDeposit() {
+    const amount = parseFloat(document.getElementById('deposit-amount')?.value);
+    
+    if (!amount || amount <= 0) {
+        alert('Please enter a valid amount.');
+        return;
     }
 
-    let startTime = Date.now();
-    gameInterval = setInterval(() => {
-        let elapsed = (Date.now() - startTime) / 1000;
-        currentMultiplier = parseFloat((Math.exp(0.12 * elapsed)).toFixed(2));
-
-        if (currentMultiplier >= crashPoint) {
-            currentMultiplier = crashPoint;
-            endGame();
+    if (selectedPaymentMethod === 'M-Pesa' || selectedPaymentMethod === 'Airtel Money') {
+        const phone = document.getElementById('deposit-phone').value;
+        if (!phone) {
+            alert('Please enter a valid phone number.');
             return;
         }
-
-        multiplierText.innerText = currentMultiplier.toFixed(2) + 'x';
-
-        for (let id of [1, 2]) {
-            if (bets[id].placed && !bets[id].cashedOut) {
-                let btn = document.getElementById(`action-btn-${id}`);
-                let liveWin = (bets[id].amount * currentMultiplier).toFixed(2);
-                btn.innerHTML = `CASH OUT<br><span class="btn-sub-amt">${liveWin} KES</span>`;
-            }
-        }
-    }, 50);
-}
-
-function endGame() {
-    clearInterval(gameInterval);
-    gameState = 'CRASHED';
-    multiplierText.innerText = crashPoint.toFixed(2) + 'x';
-    multiplierText.style.color = "#d81b36";
-    waitingBadge.innerText = "FLEW AWAY!";
-    waitingBadge.style.display = 'block';
-
-    for (let id of [1, 2]) {
-        let btn = document.getElementById(`action-btn-${id}`);
-        if (bets[id].placed && !bets[id].cashedOut) {
-            btn.innerHTML = `LOST<br><span class="btn-sub-amt">0.00 KES</span>`;
-            btn.className = "main-action-btn btn-disabled";
-        }
+        
+        balance += amount;
+        if (balanceVal) balanceVal.innerText = balance.toFixed(2);
+        alert(`STK Push prompt sent to ${phone}. Balance updated by ${amount} KES.`);
+    } else if (selectedPaymentMethod === 'Crypto') {
+        const network = document.getElementById('crypto-network').value;
+        const kesEquivalent = amount * 130;
+        balance += kesEquivalent;
+        if (balanceVal) balanceVal.innerText = balance.toFixed(2);
+        alert(`Crypto deposit initiated for ${amount} USD on ${network}. Balance credited.`);
     }
 
-    setTimeout(() => {
-        resetRound();
-    }, 2500);
-}
-
-function resetRound() {
-    gameState = 'IDLE';
-    multiplierText.style.color = "#ffffff";
-    multiplierText.innerText = "1.00x";
-    waitingBadge.innerText = "WAITING FOR NEXT ROUND";
-    waitingBadge.style.display = 'block';
-
-    for (let id of [1, 2]) {
-        bets[id].placed = false;
-        bets[id].cashedOut = false;
-        let btn = document.getElementById(`action-btn-${id}`);
-        btn.innerHTML = `BET<br><span class="btn-sub-amt">${bets[id].amount.toFixed(2)} KES</span>`;
-        btn.className = "main-action-btn btn-bet";
-        btn.style.background = "";
-    }
-}
-
-// Modals and UI Toggles
-function toggleDepositModal() {
-    document.getElementById('depositModal').classList.toggle('open');
-}
-
-function selectPayment(method) {
-    alert(`Selected deposit method: ${method}`);
     toggleDepositModal();
+}
+
+function resetDepositModal() {
+    selectedPaymentMethod = null;
+    const title = document.getElementById('modal-title');
+    const selView = document.getElementById('payment-selection-view');
+    const formView = document.getElementById('payment-form-view');
+    
+    if (title) title.innerText = 'Select Deposit Method';
+    if (selView) selView.style.display = 'flex';
+    if (formView) formView.style.display = 'none';
 }
 
 function toggleMenu() {
@@ -376,12 +500,9 @@ function toggleMenu() {
     document.getElementById('menuOverlay').classList.toggle('open');
 }
 
-function toggleChatDrawer() {
-    alert("Live chat drawer opened.");
-}
-
 function switchBetTab(panelId, tab) {
     let panel = document.getElementById(`panel-${panelId}`);
+    if (!panel) return;
     panel.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
 }
@@ -390,3 +511,7 @@ function switchStatsTab(tabName) {
     document.querySelectorAll('.stats-tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
 }
+
+// Start continuous loop engine on window load
+window.addEventListener('load', startContinuousEngine);
+
