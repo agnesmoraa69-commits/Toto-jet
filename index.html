@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,18 +9,19 @@
 <body>
 
     <div class="game-wrapper">
-        <!-- Top Header with Deposit -->
+        <!-- Top App Header -->
         <div class="aviator-inner-header">
             <div class="aviator-brand">TOTO</div>
             <div class="header-right-group">
                 <div class="user-balance"><span id="balance-val">0.00</span> KES</div>
                 <button class="deposit-btn" onclick="toggleDepositModal()">+ Deposit</button>
                 <button class="menu-icon-btn" onclick="toggleMenu()">☰</button>
-                <button class="chat-icon-btn" onclick="toggleChatDrawer()">💬</button>
+                <!-- Direct WhatsApp Integration on Chat Button -->
+                <a href="https://wa.me/254114209217?text=Hello%20Support%2C%20I%20need%20help%20with%20TOTO" target="_blank" class="chat-icon-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">💬</a>
             </div>
         </div>
 
-        <!-- Recent Multiplier History Bar -->
+        <!-- Recent Multipliers Bar -->
         <div class="history-bar" id="history-bar">
             <div class="hist-badge hist-mid">2.91x</div>
             <div class="hist-badge hist-mid">2.75x</div>
@@ -32,14 +32,14 @@
             <div class="hist-badge hist-low">1.29x</div>
         </div>
 
-        <!-- Canvas Arena (Lively Animation) -->
+        <!-- Live Canvas Flight Arena -->
         <div class="arena">
             <canvas id="gameCanvas"></canvas>
             <div class="multiplier-display" id="multiplier-text">1.00x</div>
             <div class="waiting-badge" id="waiting-badge">WAITING FOR NEXT ROUND</div>
         </div>
 
-        <!-- Betting Panel 1 -->
+        <!-- Betting Control Panel 1 -->
         <div class="bet-panel" id="panel-1">
             <div class="bet-tabs">
                 <div class="tab active" onclick="switchBetTab(1, 'bet')">Bet</div>
@@ -67,7 +67,7 @@
             </div>
         </div>
 
-        <!-- Betting Panel 2 -->
+        <!-- Betting Control Panel 2 -->
         <div class="bet-panel" id="panel-2">
             <div class="bet-tabs">
                 <div class="tab active" onclick="switchBetTab(2, 'bet')">Bet</div>
@@ -95,7 +95,7 @@
             </div>
         </div>
 
-        <!-- Live Bets / Virtual Realtime Feed -->
+        <!-- Live Realtime Stats Stream -->
         <div class="live-stats-container">
             <div class="stats-nav-tabs">
                 <div class="stats-tab active" onclick="switchStatsTab('all-bets')">All Bets</div>
@@ -109,9 +109,7 @@
                 <span>X</span>
                 <span>Win KES</span>
             </div>
-            <div class="stats-list-box" id="stats-list">
-                <!-- Dynamically updated by script -->
-            </div>
+            <div class="stats-list-box" id="stats-list"></div>
             <div class="stats-footer-info">
                 <span>🛡️ Provably Fair Game</span>
                 <span>Powered by SPRIBE</span>
@@ -119,7 +117,7 @@
         </div>
     </div>
 
-    <!-- Deposit Modal -->
+    <!-- Deposit Payment Gateways Modal -->
     <div class="modal-overlay" id="depositModal">
         <div class="modal-card">
             <div class="modal-header">
@@ -148,18 +146,11 @@
                         <span>USDT (TRC20), BTC, ETH</span>
                     </div>
                 </div>
-                <div class="payment-card card" onclick="selectPayment('Card')">
-                    <div class="pay-icon">💳</div>
-                    <div class="pay-info">
-                        <strong>Credit / Debit Card</strong>
-                        <span>Visa, Mastercard</span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
 
-    <!-- Side Menu Overlay -->
+    <!-- Slide-out Navigation Drawer -->
     <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
     <div class="side-menu" id="sideMenu">
         <div class="menu-user-profile">
@@ -175,6 +166,8 @@
         <div class="menu-link-item">Game Limits</div>
         <div class="menu-link-item">How To Play</div>
         <div class="menu-link-item">Game Rules</div>
+        <!-- WhatsApp Help Centre Entry -->
+        <a href="https://wa.me/254114209217?text=Hello%20Support%2C%20I%20need%20assistance%20from%20the%20Help%20Centre" target="_blank" class="menu-link-item" style="text-decoration: none; display: block; color: #2ecc71; font-weight: bold;">💬 Help Centre (WhatsApp)</a>
         <div class="menu-link-item">Provably Fair Settings</div>
         <div class="menu-link-item">Game Room: Room #1</div>
         <div class="menu-link-home">🏠 Home</div>
