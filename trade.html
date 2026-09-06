@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOTO</title>
+    
+    <!-- Supabase JS Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <!-- Top App Header -->
+        <div class="aviator-inner-header">
+            <div class="aviator-brand">TOTO</div>
+            <div class="header-right-group">
+                <div class="user-balance"><span id="balance-val">0.00</span> KES</div>
+                <button class="deposit-btn" onclick="toggleDepositModal()">+ Deposit</button>
+                <button class="menu-icon-btn" onclick="toggleMenu()">☰</button>
+                <!-- Direct WhatsApp Integration on Chat Button -->
+                <a href="https://wa.me/254114209217?text=Hello%20Support%2C%20I%20need%20help%20with%20TOTO" target="_blank" class="chat-icon-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">💬</a>
+            </div>
+        </div>
+
+        <!-- Recent Multipliers Bar -->
+        <div class="history-bar" id="history-bar">
+            <div class="hist-badge hist-mid">2.91x</div>
+            <div class="hist-badge hist-mid">2.75x</div>
+            <div class="hist-badge hist-high">13.18x</div>
+            <div class="hist-badge hist-mid">6.11x</div>
+            <div class="hist-badge hist-low">1.79x</div>
+            <div class="hist-badge hist-high">19.71x</div>
+            <div class="hist-badge hist-low">1.29x</div>
+        </div>
+
+        <!-- Live Canvas Flight Arena -->
+        <div class="arena">
+            <canvas id="gameCanvas"></canvas>
+            <div class="multiplier-display" id="multiplier-text">1.00x</div>
+            <div class="waiting-badge" id="waiting-badge">WAITING FOR NEXT ROUND</div>
+        </div>
+
+        <!-- Betting Control Panel 1 -->
+        <div class="bet-panel" id="panel-1">
+            <div class="bet-tabs">
+                <div class="tab active" onclick="switchBetTab(1, 'bet')">Bet</div>
+                <div class="tab" onclick="switchBetTab(1, 'auto')">Auto</div>
+            </div>
+            <div class="bet-row">
+                <div class="bet-inputs">
+                    <div class="input-group">
+                        <button class="adjust" onclick="adjustBet(1, -10)">-</button>
+                        <input type="number" id="bet-amount-1" value="10.00">
+                        <button class="adjust" onclick="adjustBet(1, 10)">+</button>
+                    </div>
+                    <div class="quick-amounts">
+                        <div class="quick-btn" onclick="setBet(1, 100)">100</div>
+                        <div class="quick-btn" onclick="setBet(1, 200)">200</div>
+                        <div class="quick-btn" onclick="setBet(1, 500)">500</div>
+                        <div class="quick-btn" onclick="setBet(1, 25000)">25,000</div>
+                    </div>
+                </div>
+                <div class="action-btn-wrapper">
+                    <button id="action-btn-1" class="main-action-btn btn-bet" onclick="handleAction(1)">
+                        BET<br><span class="btn-sub-amt" id="sub-1">10.00 KES</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Betting Control Panel 2 -->
+        <div class="bet-panel" id="panel-2">
+            <div class="bet-tabs">
+                <div class="tab active" onclick="switchBetTab(2, 'bet')">Bet</div>
+                <div class="tab" onclick="switchBetTab(2, 'auto')">Auto</div>
+            </div>
+            <div class="bet-row">
+                <div class="bet-inputs">
+                    <div class="input-group">
+                        <button class="adjust" onclick="adjustBet(2, -10)">-</button>
+                        <input type="number" id="bet-amount-2" value="10.00">
+                        <button class="adjust" onclick="adjustBet(2, 10)">+</button>
+                    </div>
+                    <div class="quick-amounts">
+                        <div class="quick-btn" onclick="setBet(2, 100)">100</div>
+                        <div class="quick-btn" onclick="setBet(2, 200)">200</div>
+                        <div class="quick-btn" onclick="setBet(2, 500)">500</div>
+                        <div class="quick-btn" onclick="setBet(2, 25000)">25,000</div>
+                    </div>
+                </div>
+                <div class="action-btn-wrapper">
+                    <button id="action-btn-2" class="main-action-btn btn-bet" onclick="handleAction(2)">
+                        BET<br><span class="btn-sub-amt" id="sub-2">10.00 KES</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Realtime Stats Stream -->
+        <div class="live-stats-container">
+            <div class="stats-nav-tabs">
+                <div class="stats-tab active" onclick="switchStatsTab('all-bets')">All Bets</div>
+                <div class="stats-tab" onclick="switchStatsTab('previous')">Previous</div>
+                <div class="stats-tab" onclick="switchStatsTab('top')">Top</div>
+            </div>
+            <div class="stats-header-row">
+                <span>ALL BETS<br><b id="total-bets-count">2965</b></span>
+                <span>User</span>
+                <span>Bet KES</span>
+                <span>X</span>
+                <span>Win KES</span>
+            </div>
+            <div class="stats-list-box" id="stats-list"></div>
+            <div class="stats-footer-info">
+                <span>🛡️ Provably Fair Game</span>
+                <span>Powered by SPRIBE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deposit Payment Gateways Modal -->
+    <div class="modal-overlay" id="depositModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Select Deposit Method</h3>
+                <button class="close-modal-btn" onclick="toggleDepositModal()">✕</button>
+            </div>
+            <div class="payment-methods">
+                <div class="payment-card mpesa" onclick="selectPayment('M-Pesa')">
+                    <div class="pay-icon">📱</div>
+                    <div class="pay-info">
+                        <strong>M-Pesa</strong>
+                        <span>Instant STK Push</span>
+                    </div>
+                </div>
+                <div class="payment-card airtel" onclick="selectPayment('Airtel Money')">
+                    <div class="pay-icon">📲</div>
+                    <div class="pay-info">
+                        <strong>Airtel Money</strong>
+                        <span>Direct Mobile Wallet</span>
+                    </div>
+                </div>
+                <div class="payment-card crypto" onclick="selectPayment('Crypto')">
+                    <div class="pay-icon">₿</div>
+                    <div class="pay-info">
+                        <strong>Crypto Currency</strong>
+                        <span>USDT (TRC20), BTC, ETH</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide-out Navigation Drawer -->
+    <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+    <div class="side-menu" id="sideMenu">
+        <div class="menu-user-profile">
+            <div class="menu-avatar"></div>
+            <div class="menu-phone">254717XXX875</div>
+            <button class="change-avatar-btn">Change Avatar</button>
+        </div>
+        <div class="menu-toggle-row"><span>Sound</span><input type="checkbox" id="soundToggle" checked></div>
+        <div class="menu-toggle-row"><span>Music</span><input type="checkbox" id="musicToggle"></div>
+        <div class="menu-toggle-row"><span>Animation</span><input type="checkbox" checked></div>
+        <div class="menu-link-item">Free Bets</div>
+        <div class="menu-link-item">My Bet History</div>
+        <div class="menu-link-item">Game Limits</div>
+        <div class="menu-link-item">How To Play</div>
+        <div class="menu-link-item">Game Rules</div>
+        <!-- WhatsApp Help Centre Entry -->
+        <a href="https://wa.me/254114209217?text=Hello%20Support%2C%20I%20need%20assistance%20from%20the%20Help%20Centre" target="_blank" class="menu-link-item" style="text-decoration: none; display: block; color: #2ecc71; font-weight: bold;">💬 Help Centre (WhatsApp)</a>
+        <div class="menu-link-item">Provably Fair Settings</div>
+        <div class="menu-link-item">Game Room: Room #1</div>
+        <div class="menu-link-home">🏠 Home</div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
