@@ -4,18 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TOTO - Pepeta</title>
+    <title>TOTO</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Main Game Container -->
     <div class="game-wrapper">
-        <!-- Top Aviator Internal Bar -->
+        <!-- Top Header with Deposit -->
         <div class="aviator-inner-header">
-            <div class="aviator-brand">Aviator</div>
+            <div class="aviator-brand">TOTO</div>
             <div class="header-right-group">
                 <div class="user-balance"><span id="balance-val">0.00</span> KES</div>
+                <button class="deposit-btn" onclick="toggleDepositModal()">+ Deposit</button>
                 <button class="menu-icon-btn" onclick="toggleMenu()">☰</button>
                 <button class="chat-icon-btn" onclick="toggleChatDrawer()">💬</button>
             </div>
@@ -32,10 +32,11 @@
             <div class="hist-badge hist-low">1.29x</div>
         </div>
 
-        <!-- Canvas Arena (Plane & Multiplier) -->
+        <!-- Canvas Arena (Lively Animation) -->
         <div class="arena">
             <canvas id="gameCanvas"></canvas>
-            <div class="multiplier-display" id="multiplier-text">1.05x</div>
+            <div class="multiplier-display" id="multiplier-text">1.00x</div>
+            <div class="waiting-badge" id="waiting-badge">WAITING FOR NEXT ROUND</div>
         </div>
 
         <!-- Betting Panel 1 -->
@@ -60,7 +61,7 @@
                 </div>
                 <div class="action-btn-wrapper">
                     <button id="action-btn-1" class="main-action-btn btn-bet" onclick="handleAction(1)">
-                        BET<br><span class="btn-sub-amt">10.00 KES</span>
+                        BET<br><span class="btn-sub-amt" id="sub-1">10.00 KES</span>
                     </button>
                 </div>
             </div>
@@ -71,7 +72,6 @@
             <div class="bet-tabs">
                 <div class="tab active" onclick="switchBetTab(2, 'bet')">Bet</div>
                 <div class="tab" onclick="switchBetTab(2, 'auto')">Auto</div>
-                <button class="panel-minimize-toggle">🗕</button>
             </div>
             <div class="bet-row">
                 <div class="bet-inputs">
@@ -89,13 +89,13 @@
                 </div>
                 <div class="action-btn-wrapper">
                     <button id="action-btn-2" class="main-action-btn btn-bet" onclick="handleAction(2)">
-                        BET<br><span class="btn-sub-amt">10.00 KES</span>
+                        BET<br><span class="btn-sub-amt" id="sub-2">10.00 KES</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Live Bets / Stats Drawer Section -->
+        <!-- Live Bets / Virtual Realtime Feed -->
         <div class="live-stats-container">
             <div class="stats-nav-tabs">
                 <div class="stats-tab active" onclick="switchStatsTab('all-bets')">All Bets</div>
@@ -103,18 +103,14 @@
                 <div class="stats-tab" onclick="switchStatsTab('top')">Top</div>
             </div>
             <div class="stats-header-row">
-                <span>ALL BETS<br><b>2965</b></span>
-                <span>Player</span>
+                <span>ALL BETS<br><b id="total-bets-count">2965</b></span>
+                <span>User</span>
                 <span>Bet KES</span>
                 <span>X</span>
                 <span>Win KES</span>
             </div>
             <div class="stats-list-box" id="stats-list">
-                <div class="stat-item"><span class="player-pill"><span class="avatar-mini lion"></span> 2***3</span><span>3,070.00</span><span>-</span><span>-</span></div>
-                <div class="stat-item"><span class="player-pill"><span class="avatar-mini face"></span> 2***6</span><span>1,250.00</span><span>2.11x</span><span class="win-val">2,637.50</span></div>
-                <div class="stat-item"><span class="player-pill"><span class="avatar-mini purple"></span> 2***2</span><span>1,200.00</span><span>1.55x</span><span class="win-val">1,860.00</span></div>
-                <div class="stat-item"><span class="player-pill"><span class="avatar-mini profile"></span> 2***6</span><span>1,100.00</span><span>-</span><span>-</span></div>
-                <div class="stat-item"><span class="player-pill"><span class="avatar-mini wolf"></span> 2***2</span><span>1,000.00</span><span>3.40x</span><span class="win-val">3,400.00</span></div>
+                <!-- Dynamically updated by script -->
             </div>
             <div class="stats-footer-info">
                 <span>🛡️ Provably Fair Game</span>
@@ -123,7 +119,47 @@
         </div>
     </div>
 
-    <!-- Slide-out Menu Overlay -->
+    <!-- Deposit Modal -->
+    <div class="modal-overlay" id="depositModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Select Deposit Method</h3>
+                <button class="close-modal-btn" onclick="toggleDepositModal()">✕</button>
+            </div>
+            <div class="payment-methods">
+                <div class="payment-card mpesa" onclick="selectPayment('M-Pesa')">
+                    <div class="pay-icon">📱</div>
+                    <div class="pay-info">
+                        <strong>M-Pesa</strong>
+                        <span>Instant STK Push</span>
+                    </div>
+                </div>
+                <div class="payment-card airtel" onclick="selectPayment('Airtel Money')">
+                    <div class="pay-icon">📲</div>
+                    <div class="pay-info">
+                        <strong>Airtel Money</strong>
+                        <span>Direct Mobile Wallet</span>
+                    </div>
+                </div>
+                <div class="payment-card crypto" onclick="selectPayment('Crypto')">
+                    <div class="pay-icon">₿</div>
+                    <div class="pay-info">
+                        <strong>Crypto Currency</strong>
+                        <span>USDT (TRC20), BTC, ETH</span>
+                    </div>
+                </div>
+                <div class="payment-card card" onclick="selectPayment('Card')">
+                    <div class="pay-icon">💳</div>
+                    <div class="pay-info">
+                        <strong>Credit / Debit Card</strong>
+                        <span>Visa, Mastercard</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Menu Overlay -->
     <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
     <div class="side-menu" id="sideMenu">
         <div class="menu-user-profile">
@@ -131,9 +167,9 @@
             <div class="menu-phone">254717XXX875</div>
             <button class="change-avatar-btn">Change Avatar</button>
         </div>
-        <div class="menu-toggle-row"><span>Sound</span><input type="checkbox" class="tgl" checked></div>
-        <div class="menu-toggle-row"><span>Music</span><input type="checkbox" class="tgl"></div>
-        <div class="menu-toggle-row"><span>Animation</span><input type="checkbox" class="tgl" checked></div>
+        <div class="menu-toggle-row"><span>Sound</span><input type="checkbox" id="soundToggle" checked></div>
+        <div class="menu-toggle-row"><span>Music</span><input type="checkbox" id="musicToggle"></div>
+        <div class="menu-toggle-row"><span>Animation</span><input type="checkbox" checked></div>
         <div class="menu-link-item">Free Bets</div>
         <div class="menu-link-item">My Bet History</div>
         <div class="menu-link-item">Game Limits</div>
